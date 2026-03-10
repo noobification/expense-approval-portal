@@ -49,10 +49,12 @@ const requireAuth = async (req: express.Request, res: express.Response, next: ex
         let dbUser = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
 
         const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'jablodominik@gmail.com').toLowerCase();
+        const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
         const userEmail = user.email?.toLowerCase();
         const isAdminEmail = userEmail === ADMIN_EMAIL;
+        const isHardcodedAdmin = user.id === ADMIN_USER_ID || isAdminEmail;
 
-        console.log(`[Auth] Request for: ${userEmail}, isAdminEmail: ${isAdminEmail}, path: ${req.path}`);
+        console.log(`[Auth] Request for: ${userEmail}, isHardcodedAdmin: ${isHardcodedAdmin}, path: ${req.path}`);
 
         if (dbUser.length === 0) {
             console.log(`[Auth] Provisioning new user: ${userEmail}`);
@@ -61,13 +63,13 @@ const requireAuth = async (req: express.Request, res: express.Response, next: ex
                 id: user.id,
                 name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Unknown User',
                 email: user.email || '',
-                isApproved: isAdminEmail ? "true" : "false",
-                role: (process.env.ADMIN_USER_ID === user.id || isAdminEmail) ? "Admin" : "User"
+                isApproved: isHardcodedAdmin ? "true" : "false",
+                role: isHardcodedAdmin ? "Admin" : "User"
             }).returning();
             dbUser = newUser;
-        } else if (isAdminEmail && (dbUser[0].isApproved !== "true" || dbUser[0].role !== "Admin")) {
+        } else if (isHardcodedAdmin && (dbUser[0].isApproved !== "true" || dbUser[0].role !== "Admin")) {
             console.log(`[Auth] Auto-approving admin: ${userEmail}`);
-            // Auto-approve and make admin if it's the specified admin email
+            // Auto-approve and make admin if it's the specified admin email or ID
             const updatedUser = await db.update(users)
                 .set({ isApproved: "true", role: "Admin" })
                 .where(eq(users.id, user.id))
@@ -77,8 +79,8 @@ const requireAuth = async (req: express.Request, res: express.Response, next: ex
 
         console.log(`[Auth] DB Status for ${userEmail}: isApproved=${dbUser[0].isApproved}, role=${dbUser[0].role}`);
 
-        const isApproved = dbUser[0].isApproved === "true" || isAdminEmail;
-        const isAdmin = dbUser[0].role === "Admin" || process.env.ADMIN_USER_ID === user.id || isAdminEmail;
+        const isApproved = dbUser[0].isApproved === "true" || isHardcodedAdmin;
+        const isAdmin = dbUser[0].role === "Admin" || isHardcodedAdmin;
 
         // Bypass approval for admin or if on /me endpoint
         if (!isApproved && !isAdmin && req.path !== '/me') {
