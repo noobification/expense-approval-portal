@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     LayoutDashboard,
@@ -30,8 +31,25 @@ interface SidebarProps {
 }
 
 export const Sidebar = ({ activeTab, onTabChange, isOpen, onClose }: SidebarProps) => {
-    const { user, isAdmin, signOut } = useAuth();
+    const { user, session, isAdmin, signOut } = useAuth();
+    const [pendingCount, setPendingCount] = useState(0);
     const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Partner";
+
+    React.useEffect(() => {
+        if (isAdmin && session?.access_token) {
+            fetch('/api/admin/users', {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        const count = data.filter((u: any) => u.isApproved === "false" || u.isApproved === false).length;
+                        setPendingCount(count);
+                    }
+                })
+                .catch(err => console.error("Failed to fetch pending user count:", err));
+        }
+    }, [isAdmin, session?.access_token]);
 
     const sidebarContent = (
         <aside
@@ -96,7 +114,12 @@ export const Sidebar = ({ activeTab, onTabChange, isOpen, onClose }: SidebarProp
                     >
                         <Users size={20} className={cn(activeTab === "admin-users" ? "text-primary" : "group-hover:scale-105 transition-transform opacity-70")} />
                         <span className="font-semibold text-sm">User Management</span>
-                        {activeTab === "admin-users" && <ChevronRight size={14} className="ml-auto" />}
+                        {pendingCount > 0 && (
+                            <span className="ml-auto bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center shadow-lg shadow-primary/20 animate-pulse">
+                                {pendingCount}
+                            </span>
+                        )}
+                        {activeTab === "admin-users" && pendingCount === 0 && <ChevronRight size={14} className="ml-auto" />}
                     </button>
                 )}
             </nav>
